@@ -1,0 +1,6 @@
+{
+  "name": "Whiteboard Studio",
+  "description": "Лична дигитална бела табла со пенкало, форми, лепливи ливчиња, дијаграми и белешки.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
