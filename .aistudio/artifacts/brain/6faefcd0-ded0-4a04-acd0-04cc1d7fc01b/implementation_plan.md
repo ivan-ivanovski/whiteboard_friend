@@ -1,30 +1,26 @@
-# Whiteboard Studio (Personal Canvas & Notes)
+# Whiteboard Friend (Stylus Gestures, Scratch-to-Erase & Canvas Intro)
 
-A versatile personal visual workspace combining Microsoft Whiteboard's fluid inking, Draw.io's diagramming shapes and connectors, and FigJam's colorful sticky notes and task lists on an infinite, hardware-accelerated canvas.
+Transform the personal whiteboard into **Whiteboard Friend** with natural pen-only productivity gestures: scratch-to-erase (scribble-out), subtle canvas watermark intro that fades on first touch, radial quick menu on double-tap, hold-to-snap lines and shapes, lasso selection, and comprehensive accessibility.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Based on your clarifications, the application is tailored for personal visual note-taking, sketching, and structured diagramming, with local offline persistence and zero external account dependencies.
+> Based on your answers, Whiteboard Friend will prioritize an intuitive, keyboard-free tablet experience where your digital pen behaves like a magic pencil.
 
-- **Hybrid Workflow Confirmed**: Merges fluid pen/highlighter sketching (Microsoft Whiteboard style) with structured shapes and connectors (Draw.io style) and vibrant sticky notes & checklists (FigJam style).
-- **Core Toolset Confirmed**:
-  1. Freehand Pen (variable stroke, smoothness) & Semi-transparent Highlighter
-  2. Precision Eraser (stroke eraser + point eraser) & Virtual Canvas Ruler
-  3. Colorful Sticky Notes (with markdown-style bulleted text and quick color presets)
-  4. Geometric Shapes (rectangles, rounded boxes, circles/ellipses, diamonds, clouds)
-  5. Connectors & Arrows (straight, curved/elbow arrows that can snap to element anchors)
-  6. Rich Text Boxes & Interactive Task Checklists (clickable completion toggles)
-- **Local Persistence & Board Management Confirmed**: Multi-board switcher with board templates, auto-save to browser `localStorage` / `IndexedDB`, duplicate/rename boards, and lossless JSON import/export as well as high-res PNG and vector SVG export.
-- **Language & Interface Tone**: Clean Macedonian and English support with crisp, accessible tooltips and clear shortcuts.
+- **Scratch-to-Erase (Scribble-Out)**: Fast zig-zag / back-and-forth pen scribbling over any stroke, text, sticky note, or shape will automatically trigger erasure with a gentle fade/puff visual feedback.
+- **Canvas Intro Text**: Replaces the floating modal box with an elegant, non-intrusive plain text watermark embedded directly into the canvas background ("Whiteboard Friend · Скицирајте со пенкало или допрете за почеток"), which smoothly dissolves on the user's very first stroke, touch, or click.
+- **Pen-First Radial Menu (Double-Tap)**: Double-tapping with stylus/pen opens an ergonomic circular/pie menu right at the pen tip with instant shortcuts (Undo, Redo, Eraser toggle, Ink Colors, Sticky Note).
+- **Hold-to-Snap (Smart Shapes)**: Drawing a line, circle, or box and holding the pen still for 400ms at the end automatically snaps it into a mathematically perfect straight line, true circle, or crisp rectangle.
+- **Lasso Selection**: Encircling elements with the pen allows grouping and moving multiple items simultaneously.
+- **Branding Update**: App title and identity refreshed to **Whiteboard Friend** across the interface, TopNav, manifest, and meta tags.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: Provides an ultra-responsive, infinite 2D canvas with pan, zoom, grid snapping (dots, grid, or blank), and an intuitive floating toolbar. Users can freely sketch with natural ink, highlight key ideas, place sticky notes for brainstorming, draw diagrams with snapped connectors, and manage structured checklist notes.
-- **Target Audience / Persona**: Anyone looking for a private, fast personal sketchbook, idea organizer, flowchart sketcher, or daily task visual board without account friction or latency.
-- **Key Value**: Zero setup, instant loading, complete data privacy stored on the user's device, with the tactile satisfaction of a physical whiteboard combined with modern digital editing.
+- **What It Does**: Enhances the existing infinite canvas with intelligent pen gesture recognition so users on iPads, Android tablets, Surface devices, or touch laptops can work completely without a keyboard or toolbar clicks.
+- **Target Audience / Persona**: Sketchers, note-takers, teachers, and visual thinkers who use styluses (Apple Pencil, S-Pen, Surface Pen) and want effortless, friction-free interaction.
+- **Key Value**: No tool switching needed—scribble out to erase, hold to straighten, double-tap for quick actions, and a clean blank canvas that stays distraction-free.
 
 ---
 
@@ -32,54 +28,42 @@ A versatile personal visual workspace combining Microsoft Whiteboard's fluid ink
 
 ### Key User Flows
 
-1. **Board Navigation & Canvas Exploration**:
-   - The user opens the app to their last active board or an empty canvas with an elegant subtle dot grid.
-   - Smooth panning (spacebar + drag, middle mouse click, or two-finger scroll) and zooming (mouse wheel or pinch gesture from 10% to 500%) with a quick "Reset View" (100%) and "Fit to Content" shortcut.
-2. **Tool Selection & Inking**:
-   - Dockable bottom/top floating toolbar with quick keys (`V` Select, `P` Pen, `H` Highlighter, `E` Eraser, `R` Ruler, `S` Sticky Note, `D` Shape, `A` Arrow/Connector, `T` Text, `C` Checklist).
-   - Pen & Highlighter palette offers calibrated stroke sizes (thin, medium, bold, chisel) and curated ink colors (Classic Ink, Pastel, Vibrant).
-   - Virtual Ruler tool can be placed on the canvas and rotated to draw perfectly straight constrained lines.
-3. **Diagramming & Sticky Notes Creation**:
-   - Click or drag to drop sticky notes in pastel yellow, mint, lavender, coral, sky blue, and charcoal.
-   - Click connector anchor points on any shape or sticky note and drag to connect to another object; arrows route cleanly and stay linked when moving items.
-4. **Task & Notes Flow**:
-   - Drop a task list block directly onto the canvas; click checkboxes to check off completed items; reorder or strike through tasks.
-5. **Multi-Board Management & Export**:
-   - Header board switcher dropdown: switch between "Brainstorming", "System Architecture", "Daily Sprint Notes", or create a new board with one click.
-   - Export modal: export selected area or entire canvas as crisp PNG (with transparent or solid background), vector SVG, or backup JSON file.
+1. **Clean First Impression (Zero-State Canvas)**:
+   - When opening an empty canvas or on fresh load, no obstructive popup modal appears.
+   - Instead, the center of the canvas shows quiet, elegant typography integrated into the grid:
+     ```
+     Whiteboard Friend
+     Скицирајте слободно со пенкало · 2 прста за зум · Пречкртајте за бришење
+     ```
+   - As soon as the pen touches the canvas or user adds an item, the text smoothly fades out (`opacity: 0`), leaving an uncluttered workspace.
+2. **Scratch-to-Erase In Action**:
+   - The user writes or draws a diagram and makes a mistake.
+   - Without reaching for the toolbar or clicking Eraser, the user simply draws a quick back-and-forth zig-zag over the unwanted stroke or sticky note.
+   - The gesture recognition algorithm detects 3+ rapid direction reversals within a compact bounding box; the target item dissolves and the scribble stroke itself is discarded.
+3. **Double-Tap Radial Quick Menu**:
+   - Double-tapping the pen anywhere on the canvas opens a compact, semi-translucent circular pie menu directly centered around the pen tip.
+   - Fast access to: Undo, Redo, Switch Pen/Highlighter, Toggle Eraser, Color swatches, and Place Sticky.
+   - Tapping an item or tapping outside instantly dismisses the menu.
+4. **Hold-to-Snap Perfect Lines & Shapes**:
+   - Draw an approximate line or circle and pause with the pen held down for ~400ms.
+   - The rough line smoothly morphs into a laser-straight vector line or true geometric ellipse/rectangle.
 
 ### Visual Identity & Theme
 
-- **Aesthetic Direction**: Minimalist, tactile, distraction-free productivity studio inspired by modern workspace tools (Figma, Linear, Apple Notes, Microsoft Fluent).
-- **Color Palette & Mood**:
-  - Canvas Background: Crisp neutral off-white (`#F8FAFC`) in light mode or slate charcoal (`#0F172A`) in dark mode.
-  - Structural Surfaces: Pure white card surfaces (`#FFFFFF`) / deep obsidian (`#1E293B`) with 1px hairline borders (`rgba(0,0,0,0.08)`).
-  - Sticky Note Palette: Mellow Lemon (`#FEF08A`), Soft Mint (`#BBF7D0`), Lavender Dream (`#E9D5FF`), Coral Peach (`#FED7AA`), Sky Mist (`#BAE6FD`), Slate Minimal (`#F1F5F9`).
-  - Ink Accents: Deep Ink (`#0F172A`), Electric Indigo (`#4F46E5`), Crimson Rose (`#E11D48`), Emerald Green (`#059669`), Golden Amber (`#D97706`).
-- **Typography & Hierarchy**:
-  - Primary UI & Headers: Modern sans for clean readability.
-  - Sticky Note & Handwritten Feel: Clean legible sans with optional handwritten/casual styling for sticky titles.
-  - Metrics / Zoom indicator / Coordinates: Tabular figures (`tabular-nums` / `JetBrains Mono`).
-- **Interactive Feedback & Motion**:
-  - Micro-interactions on toolbar items with subtle 150ms spring settling.
-  - Canvas cursor changes contextually (crosshair for drawing, grab for panning, pointer for selecting, resize handles for bounding boxes).
+- **Branding**: "Whiteboard Friend" wordmark with warm indigo-violet accent and playful pencil insignia.
+- **Palette & Atmosphere**: Crisp slate grid with zero visual clutter. Watermark uses quiet 14px–20px typography (`text-slate-400/60`).
+- **Radial Menu Design**: Apple-inspired frosted glass circle (`bg-white/90 backdrop-blur-md shadow-xl`) with high-contrast tactile icon buttons.
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Canvas Architecture: HTML5 2D Canvas + Interactive Layer**:
-  - *Chosen Approach*: Multi-layered canvas architecture:
-    1. Background Grid Canvas (draws infinite dots/grids at current viewport matrix).
-    2. Freehand Stroke Canvas (renders pen, highlighter, eraser masks with path smoothing).
-    3. Structured Elements (Shapes, Sticky Notes, Checklist Cards, Connectors) managed as vector objects rendered with interactive selection handles, bounding boxes, and connector ports.
-  - *Why*: Provides 60fps buttery smooth freehand inking latency while keeping sticky notes and checklists crisp, editable, and accessible with native inputs.
-- **Local Persistence Strategy**:
-  - *Chosen Approach*: Automatic reactive saving to browser `localStorage` with JSON serialization and backup/restore.
-  - *Why*: Instant offline capability, zero cloud signup barrier, zero latency, guaranteed user privacy.
-- **Connectors & Routing**:
-  - *Chosen Approach*: Smart orthogonal and curved Bezier connectors with 4 cardinal attachment points (top, right, bottom, left) per shape/sticky note.
-  - *Why*: Replicates Draw.io's diagramming power without visual clutter.
+- **Scribble Detection Algorithm**:
+  - *Chosen Approach*: Track the acute angle changes / bounding-box velocity reversals of a stroke during inking. If a stroke has $\ge 3$ directional inflections ($dx$ or $dy$ signs flipping back and forth) and bounding area overlap $> 50\%$ with existing elements, identify it as a scribble-out command.
+  - *Why*: Highly responsive ($\le 16\text{ms}$), runs client-side with zero dependencies, and matches natural physical writing habits.
+- **Canvas Intro Persistence**:
+  - *Chosen Approach*: Reactive state linked to whether the current board has user-drawn strokes or active edits, with automatic fade-out on `pointerdown`.
+  - *Why*: Eliminates the annoyance of closing a modal window while still guiding first-time users.
 
 ---
 
@@ -90,119 +74,46 @@ A versatile personal visual workspace combining Microsoft Whiteboard's fluid ink
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        Top Navigation Bar                              │
-│  [Board Title & Switcher]  [Undo/Redo]  [Zoom %]  [Export/Import] [Theme]│
+│  [Whiteboard Friend]  [Board: My Ideas]  [Install PWA]  [Undo] [Export]│
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
 │                      Infinite Interactive Canvas                        │
 │                                                                        │
-│  ┌─────────────────────────┐         ┌──────────────────────────────┐  │
-│  │   Sticky Note (Yellow)  │────────►│  Shape: Process Step (Blue)  │  │
-│  │   - Design whiteboard   │ Connector│  - Implement core engine    │  │
-│  │   - Add connector tools │ (Snapped)└──────────────┬───────────────┘  │
-│  └─────────────────────────┘                         │                 │
-│                                                      ▼                 │
-│  ┌─────────────────────────┐         ┌──────────────────────────────┐  │
-│  │  Interactive Checklist  │         │  Freehand Pen & Highlighter  │  │
-│  │  ☑ Canvas pan/zoom      │         │   (Natural smoothed curves)  │  │
-│  │  ☐ Export to PNG/SVG    │         │  ~~~~~~~~~~~~~~~~~~~~~~~~~~  │  │
-│  └─────────────────────────┘         └──────────────────────────────┘  │
+│        (Subtle Canvas Watermark Intro - Fades on first touch)          │
+│                                                                        │
+│         [Radial Pen Menu]  ◄── (Appears on Pen Double-Tap)             │
+│            ┌───┬───┬───┐                                               │
+│            │ ↶ │ 🖌│ 🗑 │                                               │
+│            └───┴───┴───┘                                               │
+│                                                                        │
+│         [Scribble-to-Erase Gesture]                                    │
+│             ~~~~~~ ──► Erases stroke/note underneath                   │
 │                                                                        │
 ├────────────────────────────────────────────────────────────────────────┤
 │                     Floating Main Toolbar (Docked)                     │
-│  [Select] [Pen] [Marker] [Eraser] [Ruler] [Sticky] [Shape] [Arrow] [Text]│
+│  [Select] [Pen] [Highlighter] [Eraser] [Ruler] [Sticky] [Shapes] [Text] │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Data Model & State
+### Gesture Recognition Engine
 
-```typescript
-export interface Board {
-  id: string;
-  title: string;
-  createdAt: number;
-  updatedAt: number;
-  viewport: { x: number; y: number; zoom: number };
-  gridType: 'dots' | 'lines' | 'none';
-  elements: BoardElement[];
-}
-
-export type BoardElement = 
-  | FreehandStrokeElement
-  | StickyNoteElement
-  | ShapeElement
-  | ConnectorElement
-  | TextElement
-  | ChecklistElement;
-
-export interface FreehandStrokeElement {
-  id: string;
-  type: 'stroke';
-  tool: 'pen' | 'highlighter';
-  color: string;
-  width: number;
-  opacity: number;
-  points: { x: number; y: number; pressure?: number }[];
-}
-
-export interface StickyNoteElement {
-  id: string;
-  type: 'sticky';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  title: string;
-  content: string;
-  rotation?: number;
-}
-
-export interface ShapeElement {
-  id: string;
-  type: 'shape';
-  shapeKind: 'rectangle' | 'rounded-rect' | 'circle' | 'diamond' | 'cloud';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fillColor: string;
-  strokeColor: string;
-  strokeWidth: number;
-  text?: string;
-}
-
-export interface ConnectorElement {
-  id: string;
-  type: 'connector';
-  fromId?: string;
-  fromPoint: { x: number; y: number };
-  fromAnchor?: 'top' | 'right' | 'bottom' | 'left';
-  toId?: string;
-  toPoint: { x: number; y: number };
-  toAnchor?: 'top' | 'right' | 'bottom' | 'left';
-  style: 'straight' | 'curved' | 'orthogonal';
-  arrowStart?: boolean;
-  arrowEnd?: boolean;
-  color: string;
-  width: number;
-}
-
-export interface ChecklistElement {
-  id: string;
-  type: 'checklist';
-  x: number;
-  y: number;
-  width: number;
-  title: string;
-  items: { id: string; text: string; completed: boolean }[];
-  color: string;
-}
-```
-
-### Interactive Component & State Mapping
-
-- **Canvas Viewport Store**: Tracks transform matrix `[scale, 0, 0, scale, panX, panY]`, translates screen mouse events to canvas world coordinates.
-- **History (Undo / Redo Stack)**: Command pattern with immutable state snapshots allowing instantaneous `Ctrl+Z` / `Ctrl+Y`.
-- **Selection & Transform Box**: Drag-to-select multiple items, resize with corner/edge handles, duplicate (`Ctrl+D`), delete (`Backspace`/`Delete`), bring to front / send to back.
-- **Ruler Tool**: Interactive overlay ruler that can be dragged and rotated (`0°`, `30°`, `45°`, `90°`), guiding the pen to draw straight lines effortlessly.
-- **Export Engine**: Renders off-screen canvas matching the bounding box of elements for crisp PNG export or SVG vector serialization.
+- **Scribble Detection**:
+  ```typescript
+  export function detectScribble(points: Point[]): boolean {
+    if (points.length < 8) return false;
+    let reversals = 0;
+    let prevDx = 0;
+    for (let i = 2; i < points.length; i++) {
+      const dx = points[i].x - points[i - 1].x;
+      if (Math.abs(dx) > 3) {
+        if (prevDx !== 0 && Math.sign(dx) !== Math.sign(prevDx)) {
+          reversals++;
+        }
+        prevDx = dx;
+      }
+    }
+    return reversals >= 3;
+  }
+  ```
+- **Hold-to-Snap Timer**: `setTimeout` (400ms) on pointerdown/move when velocity drops near zero; if held, calculates best-fit straight line or circle.
+- **Radial Pie Menu Component**: `src/components/RadialMenu.tsx` rendered at screen coordinates of double-tap event.

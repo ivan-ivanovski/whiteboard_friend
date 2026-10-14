@@ -10,9 +10,10 @@ import {
   FolderOpen,
   Plus,
   Grid,
-  Sparkles,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface TopNavProps {
   board: Board;
@@ -30,6 +31,7 @@ interface TopNavProps {
   onOpenExportModal: () => void;
   onNewBoard: () => void;
   onOpenShortcuts: () => void;
+  onToggleWelcome?: () => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -48,27 +50,28 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenExportModal,
   onNewBoard,
   onOpenShortcuts,
+  onToggleWelcome,
 }) => {
   const zoomPercent = Math.round(viewport.zoom * 100);
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 flex items-center justify-between gap-8 z-40 select-none">
+    <header className="fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3 sm:px-4 flex items-center justify-between gap-4 sm:gap-8 z-40 select-none">
       {/* Zone 1: Brand Wordmark and Active Board Selector */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm font-bold text-sm">
             W
           </div>
-          <span className="text-base font-bold tracking-tight text-slate-900 whitespace-nowrap">
-            Whiteboard Studio
+          <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900 whitespace-nowrap">
+            Whiteboard Friend
           </span>
         </div>
 
-        <div className="h-4 w-px bg-slate-200" />
+        <div className="hidden sm:block h-4 w-px bg-slate-200" />
 
         <button
           onClick={onOpenBoardManager}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors max-w-[220px] truncate"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors max-w-[140px] sm:max-w-[200px] truncate"
           title="Отвори менаџер на табли (Switch Board)"
         >
           <FolderOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -77,7 +80,7 @@ export const TopNav: React.FC<TopNavProps> = ({
       </div>
 
       {/* Zone 2: Canvas Navigation, Undo/Redo, Zoom, Grid */}
-      <nav className="flex items-center gap-2 shrink-0">
+      <nav className="hidden md:flex items-center gap-2 shrink-0">
         {/* Undo / Redo */}
         <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg">
           <button
@@ -153,8 +156,23 @@ export const TopNav: React.FC<TopNavProps> = ({
         </button>
       </nav>
 
-      {/* Zone 3: Primary Actions (Export, New Board, Help) */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Zone 3: PWA Install, Welcome Guide, Export, New Board */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* PWA Install Button with automatic device detection */}
+        <PWAInstallButton />
+
+        {/* Welcome Guide launcher (if provided) */}
+        {onToggleWelcome && (
+          <button
+            onClick={onToggleWelcome}
+            className="flex items-center gap-1 p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors text-xs font-semibold"
+            title="Отвори почетен водич со кратенки"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span className="hidden lg:inline">Водич</span>
+          </button>
+        )}
+
         <button
           onClick={onOpenShortcuts}
           className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
@@ -165,7 +183,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 
         <button
           onClick={onNewBoard}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors border border-slate-200"
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors border border-slate-200"
           title="Креирај нова табла"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -174,7 +192,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 
         <button
           onClick={onOpenExportModal}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-xs"
           title="Експортирај слика или бекап"
         >
           <Download className="w-3.5 h-3.5" />

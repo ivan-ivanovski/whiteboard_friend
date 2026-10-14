@@ -1,6 +1,8 @@
 {
-  "name": "Whiteboard Studio",
-  "description": "Лична дигитална бела табла со пенкало, форми, лепливи ливчиња, дијаграми и белешки.",
+  "name": "Whiteboard Friend",
+  "description": "Лична дигитална бела табла со пенкало, пречкртување за бришење, форми, лепливи ливчиња и белешки.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

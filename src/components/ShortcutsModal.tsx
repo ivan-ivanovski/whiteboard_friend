@@ -10,6 +10,11 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   const shortcuts = [
+    { key: 'Пречкртување (Zig-zag)', desc: 'Пречкртајте врз потез или ливче за бришење (Scratch-to-erase)' },
+    { key: 'Двоен допир (Double-tap)', desc: 'Отвори брзо кружно мени (Undo, Алатки, Бои)' },
+    { key: 'Задржување (Hold 400ms)', desc: 'Автоматски исправи линија или направи круг' },
+    { key: '2 Прста (Two fingers)', desc: 'Поместување на платното и Pinch зумирање' },
+    { key: 'Stylus притисок', desc: 'Динамична дебелина на линијата според притисок' },
     { key: 'V', desc: 'Алатка за селекција (Select)' },
     { key: 'H / Space', desc: 'Рака за поместување на платното (Pan Canvas)' },
     { key: 'P', desc: 'Пенкало за слободно цртање (Pen)' },

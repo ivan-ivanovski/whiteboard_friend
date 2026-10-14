@@ -12,11 +12,18 @@ import {
   Viewport,
 } from '../types/whiteboard';
 import { renderBackgroundGrid, renderAllStrokes, drawSmoothedStroke } from '../utils/canvasRenderer';
-import { snapToRuler, hitTestStroke, getElementAnchorPoints } from '../utils/geometry';
+import { snapToRuler, hitTestStroke, getElementAnchorPoints, getElementBoundingBox } from '../utils/geometry';
+import {
+  isScribbleGesture,
+  findElementsUnderScribble,
+  detectHoldToSnap,
+} from '../utils/gestureDetection';
 import { StickyNoteView } from './StickyNoteView';
 import { ChecklistView } from './ChecklistView';
 import { ShapeView } from './ShapeView';
 import { RulerOverlay } from './RulerOverlay';
+import { RadialMenu } from './RadialMenu';
+import { CanvasWatermark } from './CanvasWatermark';
 
 interface WhiteboardCanvasProps {
   board: Board;
@@ -26,6 +33,7 @@ interface WhiteboardCanvasProps {
   activeTool: ToolType;
   setActiveTool: (tool: ToolType) => void;
   strokeColor: string;
+  setStrokeColor: (color: string) => void;
   strokeWidth: number;
   highlighterColor: string;
   highlighterWidth: number;
@@ -34,6 +42,10 @@ interface WhiteboardCanvasProps {
   ruler: RulerState;
   onUpdateRuler: (ruler: RulerState) => void;
   onCloseRuler: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
@@ -44,6 +56,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   activeTool,
   setActiveTool,
   strokeColor,
+  setStrokeColor,
   strokeWidth,
   highlighterColor,
   highlighterWidth,
@@ -52,21 +65,50 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   ruler,
   onUpdateRuler,
   onCloseRuler,
+  canUndo = false,
+  canRedo = false,
+  onUndo = () => {},
+  onRedo = () => {},
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const strokesCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Canvas interaction status (to dissolve watermark intro text)
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  // Scratch-to-erase notification toast
+  const [eraseNotification, setEraseNotification] = useState<string | null>(null);
 
   // Active inking stroke
   const isDrawingRef = useRef(false);
   const currentStrokeRef = useRef<FreehandStrokeElement | null>(null);
 
+  // Hold-to-snap timer & state
+  const holdTimerRef = useRef<any>(null);
+  const lastMoveTimeRef = useRef<number>(0);
+  const [isSnappedShape, setIsSnappedShape] = useState(false);
+
+  // Radial Menu (Double tap with pen/pointer)
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const [radialMenu, setRadialMenu] = useState<{
+    screenPos: { x: number; y: number };
+    worldPos: Point;
+  } | null>(null);
+
   // Canvas Panning state
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [spacePressed, setSpacePressed] = useState(false);
+
+  // Stylus Palm Rejection & Multi-touch Gesture tracking
+  const activePointersRef = useRef<Map<number, { x: number; y: number; pointerType: string }>>(new Map());
+  const initialPinchDistRef = useRef<number | null>(null);
+  const initialPinchZoomRef = useRef<number>(1);
+  const isStylusActiveRef = useRef<boolean>(false);
 
   // Connector drawing state
   const [activeConnectorPreview, setActiveConnectorPreview] = useState<{
@@ -90,14 +132,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     return {
       x: (sx - viewport.x * viewport.zoom) / viewport.zoom,
       y: (sy - viewport.y * viewport.zoom) / viewport.zoom,
-    };
-  }, [viewport]);
-
-  // Convert world coordinates to screen coordinates
-  const worldToScreen = useCallback((wx: number, wy: number): Point => {
-    return {
-      x: wx * viewport.zoom + viewport.x * viewport.zoom,
-      y: wy * viewport.zoom + viewport.y * viewport.zoom,
     };
   }, [viewport]);
 
@@ -196,6 +230,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     e.preventDefault();
     if (!containerRef.current) return;
 
+    setHasInteracted(true);
     const zoomFactor = 1.1;
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -234,7 +269,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
   // Delete element
   const handleDeleteElement = (id: string) => {
-    // Also remove connectors attached to this element
     const nextElements = board.elements.filter((el) => {
       if (el.id === id) return false;
       if (el.type === 'connector' && (el.fromId === id || el.toId === id)) return false;
@@ -286,49 +320,138 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     setSelectedId(duplicated.id);
   };
 
-  // Canvas Mouse Down
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Right click or middle click or space key: pan
-    if (e.button === 1 || e.button === 2 || spacePressed || activeTool === 'hand') {
+  // Erase strokes hit-tested with point
+  const eraseAtPoint = (worldPt: Point) => {
+    let erasedAny = false;
+    const nextElements = board.elements.filter((el) => {
+      if (el.type === 'stroke') {
+        const hit = hitTestStroke(el, worldPt, 14);
+        if (hit) {
+          erasedAny = true;
+          return false;
+        }
+      }
+      return true;
+    });
+
+    if (erasedAny) {
+      onUpdateElements(nextElements, true);
+    }
+  };
+
+  // POINTER DOWN: Universal support for Stylus, Touch, Mouse
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // Fade watermark out on first touch/interaction
+    setHasInteracted(true);
+
+    // Palm Rejection: If stylus is active, ignore accidental finger/palm touch events
+    if (isStylusActiveRef.current && e.pointerType === 'touch') {
+      return;
+    }
+
+    activePointersRef.current.set(e.pointerId, {
+      x: e.clientX,
+      y: e.clientY,
+      pointerType: e.pointerType,
+    });
+
+    if (e.pointerType === 'pen') {
+      isStylusActiveRef.current = true;
+    }
+
+    // MULTI-TOUCH GESTURE: 2 fingers on tablet -> Start Pinch Zoom & Two-Finger Pan!
+    if (activePointersRef.current.size === 2) {
+      isDrawingRef.current = false;
+      currentStrokeRef.current = null;
+      isPanningRef.current = false;
+
+      const pts = Array.from(activePointersRef.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialPinchDistRef.current = dist;
+      initialPinchZoomRef.current = viewport.zoom;
+      panStartRef.current = {
+        x: (pts[0].x + pts[1].x) / 2,
+        y: (pts[0].y + pts[1].y) / 2,
+      };
+      return;
+    }
+
+    // DOUBLE-TAP DETECTION for Radial Pen Menu
+    const now = Date.now();
+    const worldPt = screenToWorld(e.clientX, e.clientY);
+
+    if (lastTapRef.current && (now - lastTapRef.current.time < 320)) {
+      const tapDist = Math.hypot(e.clientX - lastTapRef.current.x, e.clientY - lastTapRef.current.y);
+      if (tapDist < 25) {
+        // Double-tap confirmed! Open radial menu at tap point
+        lastTapRef.current = null;
+        isDrawingRef.current = false;
+        currentStrokeRef.current = null;
+        setRadialMenu({
+          screenPos: { x: e.clientX, y: e.clientY },
+          worldPos: worldPt,
+        });
+        return;
+      }
+    }
+    lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
+
+    // Capture pointer
+    try {
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {}
+
+    // Middle click or space key: pan
+    if (e.button === 1 || spacePressed || activeTool === 'hand') {
       isPanningRef.current = true;
       panStartRef.current = { x: e.clientX, y: e.clientY };
       return;
     }
 
-    if (e.button !== 0) return;
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
 
-    const worldPt = screenToWorld(e.clientX, e.clientY);
+    // Auto Inking on Tablet Pen
+    const isStylusPen = e.pointerType === 'pen';
+    const effectiveTool: ToolType = isStylusPen && activeTool === 'select'
+      ? 'pen'
+      : activeTool;
 
-    // If active tool is PEN or HIGHLIGHTER
-    if (activeTool === 'pen' || activeTool === 'highlighter') {
+    // INKING (Pen / Highlighter)
+    if (effectiveTool === 'pen' || effectiveTool === 'highlighter') {
       isDrawingRef.current = true;
+      setIsSnappedShape(false);
 
-      // Check ruler snapping
       const snapped = snapToRuler(worldPt, ruler);
       const startPt = snapped.point;
+      const pressure = e.pressure && e.pressure > 0 ? e.pressure : 0.5;
+      startPt.pressure = pressure;
 
       const newStroke: FreehandStrokeElement = {
         id: `stroke-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         type: 'stroke',
-        tool: activeTool,
-        color: activeTool === 'pen' ? strokeColor : highlighterColor,
-        width: activeTool === 'pen' ? strokeWidth : highlighterWidth,
-        opacity: activeTool === 'pen' ? 1 : 0.45,
+        tool: effectiveTool,
+        color: effectiveTool === 'pen' ? strokeColor : highlighterColor,
+        width: effectiveTool === 'pen' ? strokeWidth : highlighterWidth,
+        opacity: effectiveTool === 'pen' ? 1 : 0.45,
         points: [startPt],
       };
 
       currentStrokeRef.current = newStroke;
+      lastMoveTimeRef.current = Date.now();
+
+      // Clear any previous hold timer
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
       return;
     }
 
-    // If active tool is ERASER
-    if (activeTool === 'eraser') {
+    // ERASER
+    if (effectiveTool === 'eraser') {
       eraseAtPoint(worldPt);
       return;
     }
 
-    // If active tool is STICKY NOTE: place at click
-    if (activeTool === 'sticky') {
+    // STICKY NOTE: Place at click
+    if (effectiveTool === 'sticky') {
       const newSticky: BoardElement = {
         id: `sticky-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         type: 'sticky',
@@ -347,8 +470,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       return;
     }
 
-    // If active tool is SHAPE: place at click
-    if (activeTool === 'shape') {
+    // SHAPE: Place at click
+    if (effectiveTool === 'shape') {
       const newShape: BoardElement = {
         id: `shape-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         type: 'shape',
@@ -369,8 +492,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       return;
     }
 
-    // If active tool is CHECKLIST: place at click
-    if (activeTool === 'checklist') {
+    // CHECKLIST: Place at click
+    if (effectiveTool === 'checklist') {
       const newChecklist: BoardElement = {
         id: `checklist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         type: 'checklist',
@@ -390,8 +513,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       return;
     }
 
-    // If active tool is TEXT: place at click
-    if (activeTool === 'text') {
+    // TEXT: Place at click
+    if (effectiveTool === 'text') {
       const newText: BoardElement = {
         id: `text-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         type: 'text',
@@ -410,8 +533,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       return;
     }
 
-    // If active tool is CONNECTOR directly clicked on background
-    if (activeTool === 'connector') {
+    // CONNECTOR
+    if (effectiveTool === 'connector') {
       setActiveConnectorPreview({
         fromPoint: worldPt,
         currentPoint: worldPt,
@@ -419,31 +542,53 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       return;
     }
 
-    // Clicking blank canvas with SELECT tool: deselect
+    // Deselect if clicking blank canvas with SELECT
     setSelectedId(null);
+    setSelectedIds([]);
   };
 
-  // Erase strokes hit-tested with point
-  const eraseAtPoint = (worldPt: Point) => {
-    let erasedAny = false;
-    const nextElements = board.elements.filter((el) => {
-      if (el.type === 'stroke') {
-        const hit = hitTestStroke(el, worldPt, 12);
-        if (hit) {
-          erasedAny = true;
-          return false;
-        }
-      }
-      return true;
-    });
-
-    if (erasedAny) {
-      onUpdateElements(nextElements, true);
+  // POINTER MOVE: Universal support
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, {
+        x: e.clientX,
+        y: e.clientY,
+        pointerType: e.pointerType,
+      });
     }
-  };
 
-  // Mouse Move
-  const handleMouseMove = (e: React.MouseEvent) => {
+    // MULTI-TOUCH GESTURE: Two fingers pinch zoom & pan
+    if (activePointersRef.current.size === 2 && initialPinchDistRef.current !== null && containerRef.current) {
+      const pts = Array.from(activePointersRef.current.values());
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const currentCenter = {
+        x: (pts[0].x + pts[1].x) / 2,
+        y: (pts[0].y + pts[1].y) / 2,
+      };
+
+      const scale = currentDist / initialPinchDistRef.current;
+      const targetZoom = Math.min(4, Math.max(0.15, initialPinchZoomRef.current * scale));
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const mouseX = currentCenter.x - rect.left;
+      const mouseY = currentCenter.y - rect.top;
+
+      const dx = (currentCenter.x - panStartRef.current.x) / viewport.zoom;
+      const dy = (currentCenter.y - panStartRef.current.y) / viewport.zoom;
+
+      const newX = mouseX / targetZoom - (mouseX / viewport.zoom - (viewport.x + dx));
+      const newY = mouseY / targetZoom - (mouseY / viewport.zoom - (viewport.y + dy));
+
+      onUpdateViewport({
+        x: newX,
+        y: newY,
+        zoom: targetZoom,
+      });
+
+      panStartRef.current = currentCenter;
+      return;
+    }
+
     // 1. Panning canvas
     if (isPanningRef.current) {
       const dx = (e.clientX - panStartRef.current.x) / viewport.zoom;
@@ -459,10 +604,11 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
     const worldPt = screenToWorld(e.clientX, e.clientY);
 
-    // 2. Freehand inking
+    // 2. Freehand inking with Stylus Pressure and Hold-to-Snap
     if (isDrawingRef.current && currentStrokeRef.current) {
       const snapped = snapToRuler(worldPt, ruler);
       const pt = snapped.point;
+      pt.pressure = e.pressure && e.pressure > 0 ? e.pressure : 0.5;
 
       currentStrokeRef.current.points.push(pt);
 
@@ -473,11 +619,35 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           drawSmoothedStroke(ctx, currentStrokeRef.current, viewport);
         }
       }
+
+      // HOLD-TO-SNAP: If pointer pauses near same point for 400ms, snap line or circle!
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = setTimeout(() => {
+        if (isDrawingRef.current && currentStrokeRef.current && !isSnappedShape) {
+          const snapResult = detectHoldToSnap(currentStrokeRef.current.points);
+          if (snapResult) {
+            currentStrokeRef.current.points = snapResult.snappedPoints;
+            setIsSnappedShape(true);
+            try {
+              navigator.vibrate?.(25);
+            } catch {}
+            // Live re-render
+            renderStrokes();
+            if (strokesCanvasRef.current) {
+              const ctx = strokesCanvasRef.current.getContext('2d');
+              if (ctx) {
+                drawSmoothedStroke(ctx, currentStrokeRef.current, viewport);
+              }
+            }
+          }
+        }
+      }, 420);
+
       return;
     }
 
     // 3. Eraser dragging
-    if (activeTool === 'eraser' && e.buttons === 1) {
+    if (activeTool === 'eraser' && (e.buttons === 1 || e.pressure > 0)) {
       eraseAtPoint(worldPt);
       return;
     }
@@ -501,7 +671,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         const nextX = Math.round(dragStartElementPosRef.current.x + dx);
         const nextY = Math.round(dragStartElementPosRef.current.y + dy);
 
-        // Also update any attached connectors!
         const nextElements = board.elements.map((el) => {
           if (el.id === selectedId) {
             return { ...el, x: nextX, y: nextY };
@@ -528,8 +697,19 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     }
   };
 
-  // Mouse Up
-  const handleMouseUp = (e: React.MouseEvent) => {
+  // POINTER UP / CANCEL: Universal finish with SCRATCH-TO-ERASE detection
+  const handlePointerUp = (e: React.PointerEvent) => {
+    activePointersRef.current.delete(e.pointerId);
+
+    if (e.pointerType === 'pen') {
+      isStylusActiveRef.current = false;
+    }
+
+    if (activePointersRef.current.size < 2) {
+      initialPinchDistRef.current = null;
+    }
+
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     isPanningRef.current = false;
 
     // Finish inking
@@ -537,6 +717,37 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       isDrawingRef.current = false;
       const finishedStroke = currentStrokeRef.current;
       currentStrokeRef.current = null;
+
+      // SCRATCH-TO-ERASE (Scribble-Out) GESTURE RECOGNITION!
+      // If user drew a fast zig-zag scribble over something, erase the elements underneath!
+      const scribbleCheck = isScribbleGesture(finishedStroke.points);
+
+      if (scribbleCheck.isScribble) {
+        const targetIds = findElementsUnderScribble(scribbleCheck.bbox, board.elements);
+
+        if (targetIds.length > 0) {
+          // Erase matched elements and DISCARD the scribble stroke itself!
+          const nextElements = board.elements.filter((el) => {
+            if (targetIds.includes(el.id)) return false;
+            if (el.type === 'connector' && (targetIds.includes(el.fromId || '') || targetIds.includes(el.toId || ''))) return false;
+            return true;
+          });
+
+          onUpdateElements(nextElements, true);
+
+          // Visual feedback
+          setEraseNotification('✨ Пречкртано и избришано');
+          try {
+            navigator.vibrate?.([30, 40, 30]);
+          } catch {}
+          setTimeout(() => setEraseNotification(null), 1800);
+
+          renderStrokes();
+          return;
+        }
+      }
+
+      // Normal stroke finished
       if (finishedStroke.points.length > 0) {
         onUpdateElements([...board.elements, finishedStroke], true);
       }
@@ -545,7 +756,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     // Finish connector
     if (activeConnectorPreview) {
       const worldPt = screenToWorld(e.clientX, e.clientY);
-      // Check if dropped near any element anchor
       let targetElementId: string | undefined;
       let targetAnchor: CardinalAnchor | undefined;
       let endPoint = worldPt;
@@ -586,13 +796,16 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     // Finish dragging element
     if (isDraggingElementRef.current) {
       isDraggingElementRef.current = false;
-      // Record final drag position to history
       onUpdateElements([...board.elements], true);
     }
   };
 
-  // Element mouse down to select and start dragging
-  const handleElementMouseDown = (e: React.MouseEvent, el: BoardElement) => {
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    handlePointerUp(e);
+  };
+
+  // Element mouse/pointer down to select and start dragging
+  const handleElementPointerDown = (e: React.PointerEvent, el: BoardElement) => {
     if (activeTool !== 'select') return;
     e.stopPropagation();
     setSelectedId(el.id);
@@ -605,13 +818,53 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     }
   };
 
+  // Add sticky note directly at radial menu point
+  const handleAddStickyAtPoint = () => {
+    if (!radialMenu) return;
+    const pt = radialMenu.worldPos;
+    const newSticky: BoardElement = {
+      id: `sticky-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      type: 'sticky',
+      x: Math.round(pt.x - 110),
+      y: Math.round(pt.y - 95),
+      width: 220,
+      height: 190,
+      color: stickyColor,
+      title: 'Нова белешка',
+      content: '',
+      rotation: 0,
+    };
+    onUpdateElements([...board.elements, newSticky], true);
+    setSelectedId(newSticky.id);
+  };
+
+  // Add checklist directly at radial menu point
+  const handleAddChecklistAtPoint = () => {
+    if (!radialMenu) return;
+    const pt = radialMenu.worldPos;
+    const newChecklist: BoardElement = {
+      id: `checklist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      type: 'checklist',
+      x: Math.round(pt.x - 130),
+      y: Math.round(pt.y - 80),
+      width: 260,
+      title: '📋 Нова листа со задачи',
+      color: '#FFFFFF',
+      items: [
+        { id: `item-1`, text: 'Прва задача', completed: false },
+        { id: `item-2`, text: 'Втора задача', completed: false },
+      ],
+    };
+    onUpdateElements([...board.elements, newChecklist], true);
+    setSelectedId(newChecklist.id);
+  };
+
   // Render SVG connector paths
   const renderConnector = (conn: ConnectorElement) => {
     const isSelected = selectedId === conn.id;
     const p1 = conn.fromPoint;
     const p2 = conn.toPoint;
 
-    // Arrowhead calculations
     const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
     const headlen = 10;
     const arrowPoint1 = {
@@ -632,7 +885,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         }}
         className="cursor-pointer group"
       >
-        {/* Invisible wider stroke for easier clicking */}
         <line
           x1={p1.x}
           y1={p1.y}
@@ -641,7 +893,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           stroke="transparent"
           strokeWidth={14}
         />
-        {/* Main line */}
         <line
           x1={p1.x}
           y1={p1.y}
@@ -652,7 +903,6 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           strokeDasharray={isSelected ? '6 3' : undefined}
           strokeLinecap="round"
         />
-        {/* Arrowhead */}
         {conn.arrowEnd && (
           <polygon
             points={`${p2.x},${p2.y} ${arrowPoint1.x},${arrowPoint1.y} ${arrowPoint2.x},${arrowPoint2.y}`}
@@ -675,14 +925,16 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onWheel={handleWheel}
-      className="absolute inset-0 top-14 overflow-hidden select-none"
+      className="absolute inset-0 top-14 overflow-hidden select-none touch-none"
       style={{
         cursor: getCursor(),
         backgroundColor: '#F8FAFC',
+        touchAction: 'none',
       }}
     >
       {/* 1. Background Grid Canvas */}
@@ -736,7 +988,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
           if (el.type === 'sticky') {
             return (
-              <div key={el.id} className="pointer-events-auto" onMouseDown={(e) => handleElementMouseDown(e, el)}>
+              <div key={el.id} className="pointer-events-auto" onPointerDown={(e) => handleElementPointerDown(e, el)}>
                 <StickyNoteView
                   element={el}
                   isSelected={isSelected}
@@ -756,7 +1008,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
           if (el.type === 'checklist') {
             return (
-              <div key={el.id} className="pointer-events-auto" onMouseDown={(e) => handleElementMouseDown(e, el)}>
+              <div key={el.id} className="pointer-events-auto" onPointerDown={(e) => handleElementPointerDown(e, el)}>
                 <ChecklistView
                   element={el}
                   isSelected={isSelected}
@@ -775,7 +1027,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
           if (el.type === 'shape') {
             return (
-              <div key={el.id} className="pointer-events-auto" onMouseDown={(e) => handleElementMouseDown(e, el)}>
+              <div key={el.id} className="pointer-events-auto" onPointerDown={(e) => handleElementPointerDown(e, el)}>
                 <ShapeView
                   element={el}
                   isSelected={isSelected}
@@ -800,7 +1052,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
                   e.stopPropagation();
                   setSelectedId(el.id);
                 }}
-                onMouseDown={(e) => handleElementMouseDown(e, el)}
+                onPointerDown={(e) => handleElementPointerDown(e, el)}
                 className={`absolute pointer-events-auto select-none cursor-move p-1 rounded ${
                   isSelected ? 'ring-2 ring-indigo-500 bg-white/80' : ''
                 }`}
@@ -835,6 +1087,32 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         viewport={viewport}
         onUpdateRuler={onUpdateRuler}
         onClose={onCloseRuler}
+      />
+
+      {/* 6. Subtle Canvas Watermark Intro (Fades out when interacting) */}
+      <CanvasWatermark visible={!hasInteracted && board.elements.length <= 1} />
+
+      {/* 7. Scratch-to-Erase Visual Feedback Toast */}
+      {eraseNotification && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-semibold shadow-xl border border-white/10 animate-in fade-in slide-in-from-top-2 duration-200">
+          {eraseNotification}
+        </div>
+      )}
+
+      {/* 8. Radial Pen Menu (Double Tap) */}
+      <RadialMenu
+        isOpen={radialMenu !== null}
+        position={radialMenu?.screenPos || null}
+        onClose={() => setRadialMenu(null)}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        activeTool={activeTool}
+        onSelectTool={setActiveTool}
+        onSelectColor={setStrokeColor}
+        onAddStickyAtPoint={handleAddStickyAtPoint}
+        onAddChecklistAtPoint={handleAddChecklistAtPoint}
       />
     </div>
   );

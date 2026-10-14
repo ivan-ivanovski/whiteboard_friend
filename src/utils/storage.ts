@@ -139,7 +139,7 @@ export function createDefaultBoard(): Board {
         y: 60,
         width: 400,
         height: 40,
-        text: '✨ Добредојдовте на вашиот Whiteboard',
+        text: '✨ Добредојдовте во Whiteboard Friend',
         fontSize: 22,
         color: '#0F172A',
         bold: true,

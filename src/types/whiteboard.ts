@@ -9,7 +9,8 @@ export type ToolType =
   | 'shape' 
   | 'connector' 
   | 'text' 
-  | 'checklist';
+  | 'checklist'
+  | 'lasso';
 
 export type ShapeKind = 
   | 'rectangle' 

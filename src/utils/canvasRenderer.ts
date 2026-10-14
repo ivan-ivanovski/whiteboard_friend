@@ -104,6 +104,27 @@ export function drawSmoothedStroke(
     return;
   }
 
+  const hasPressure = stroke.tool === 'pen' && points.some((p) => p.pressure !== undefined && p.pressure > 0);
+
+  if (hasPressure && points.length > 2) {
+    // Render dynamic pressure stroke with varying line width
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1];
+      const p1 = points[i];
+      const pressure = p1.pressure ?? 0.5;
+      // Modulate width by pressure (0.4 to 1.6 scale)
+      const dynamicWidth = Math.max(1, stroke.width * (0.35 + 1.3 * pressure));
+
+      ctx.beginPath();
+      ctx.lineWidth = dynamicWidth;
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
   // Smooth midpoint quadratic curve
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);

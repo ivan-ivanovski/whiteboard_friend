@@ -265,7 +265,7 @@ export default function App() {
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
       />
 
-      {/* 2. Layered Infinite Whiteboard Canvas Engine */}
+      {/* 2. Layered Infinite Whiteboard Canvas Engine with Gestures & Watermark */}
       <WhiteboardCanvas
         board={activeBoard}
         onUpdateElements={handleUpdateElements}
@@ -274,6 +274,7 @@ export default function App() {
         activeTool={activeTool}
         setActiveTool={setActiveTool}
         strokeColor={strokeColor}
+        setStrokeColor={setStrokeColor}
         strokeWidth={strokeWidth}
         highlighterColor={highlighterColor}
         highlighterWidth={highlighterWidth}
@@ -282,6 +283,10 @@ export default function App() {
         ruler={ruler}
         onUpdateRuler={setRuler}
         onCloseRuler={() => setRuler((prev) => ({ ...prev, visible: false }))}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
 
       {/* 3. Ergonomic Floating Toolbar */}

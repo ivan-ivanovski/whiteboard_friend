@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for a personal whiteboard application combining Microsoft Whiteboard, Draw.io, and FigJam: infinite pan/zoom canvas, freehand pen/highlighter, ruler and eraser, sticky notes, geometric shapes, smart connectors/arrows, rich text and interactive task checklists, multi-board management, and offline local persistence with PNG/SVG/JSON export.",
-  "updatedAt": "2026-10-14T15:36:52.208761793Z",
+  "summary": "Implementation plan for Whiteboard Friend introducing scratch-to-erase (scribble-out gesture), plain canvas watermark intro that fades upon interaction, pen-first radial quick menu on double-tap, hold-to-snap perfect lines and shapes, lasso selection, accessibility features, and Whiteboard Friend branding.",
+  "updatedAt": "2026-10-14T16:36:20.422657922Z",
   "requestFeedback": true,
   "userFacing": true
 }
